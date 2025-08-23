@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>ASA Classifier</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #0d6efd;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
+
+            100% {
+                transform: rotate(360deg);
+            }
+        }
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+    </style>
+</head>
+
+<body class="p-4">
+    <div class="container">
+        <h1 class="mb-4">ASA Classifier</h1>
+        <div class="mb-4">
+            <div class="card text-primary-emphasis bg-primary-subtle border border-primary-subtle rounded-3">
+                <div class="card-body">
+                    <p>
+                        Use this utility to classify documents to the <a
+                            href="https://www.archivists.org.au/learning-publications/records-retention-schedule-for-non-government-schools-2nd-edition">ASA
+                            Records Retention Schedule for Non-Government Schools</a>
+                    </p>
+                    <strong>Instructions</strong>
+                    <p>Either paste text below, or choose a file to classify.</p>
+                    <p>
+                        <strong>Two AI processes are used:</strong><br>
+                        1. <strong>A similarity search</strong> against the document and the ASA schedule (and
+                        any reference documents uploaded to the system)<br>
+                        2. <strong>An AI LLM query</strong> with the document content compared to all the items in the
+                        ASA Schedule.<br>
+                        Results from both processes will be shown after classification. If both results match, it will
+                        be shown in green.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <div class="mb-4">
+            <h4>Classify Text</h4>
+            <textarea id="textInput" class="form-control mb-2" placeholder="Paste text here..."></textarea>
+            <button class="btn btn-primary" onclick="classifyText()">Classify Text</button>
+        </div>
+
+        <div class="mb-4">
+            <h4>Classify File</h4>
+            <input type="file" id="fileInput" class="form-control mb-2" accept=".txt,.pdf">
+            <button class="btn btn-primary" onclick="classifyFile()">Classify File</button>
+        </div>
+
+        <div id="loader" class="loader d-none"></div>
+        <div id="status" class="text-center text-muted mt-2"></div>
+
+        <div id="results"></div>
+    </div>
+
+    <script>
+        async function classifyText() {
+            const text = document.getElementById("textInput").value;
+            if (!text.trim()) return alert("Please enter some text.");
+
+            clearResults();
+            showLoader(true, "Submitting text for classification...");
+
+            showLoader(true, "Processing classification results...");
+            const res = await fetch("/classify/text", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            });
+            const data = await res.json();
+            showLoader(false);
+            renderResults(data);
+            document.getElementById("textInput").value = "";
+        }
+
+        async function classifyFile() {
+            const fileInput = document.getElementById("fileInput");
+            const file = fileInput.files[0];
+            if (!file) return alert("Please select a file.");
+
+            clearResults();
+            const formData = new FormData();
+            formData.append("file", file);
+            showLoader(true, "Uploading file...");
+
+            showLoader(true, "Processing classification results...");
+            const res = await fetch("/classify/file", {
+                method: "POST",
+                body: formData
+            });
+            const data = await res.json();
+
+            showLoader(false);
+            renderResults(data);
+            fileInput.value = "";
+        }
+
+        function showLoader(show, message = "") {
+            document.getElementById("loader").classList.toggle("d-none", !show);
+            document.getElementById("status").innerText = show ? message : "";
+        }
+
+        function clearResults() {
+            document.getElementById("results").innerHTML = "";
+        }
+
+        function renderResults(data) {
+            let html = "";
+            console.log("Classification Results:", data);
+            // --- Classification Summary Table ---
+            html += `<h5>Classification Summary</h5>`;
+            html += `<div class="table-wrapper"><table class="table table-striped table-bordered">
+        <thead class="table-dark"><tr><th>Method</th><th>Code</th><th>Explanation</th></tr></thead><tbody>`;
+
+            const asaCodeObj = data.asa_llm_choice?.asa_llm_choice || {};
+            const simCodeObj = data.similarity_choice?.similarity_llm_choice || {};
+            const votedCodeObj = data.voted_choice || undefined;
+
+            html += `<tr><td>ASA LLM Choice</td><td>${escapeHTML(asaCodeObj.code || "-")}</td><td>${escapeHTML(asaCodeObj.Explanation || "-")}</td></tr>`;
+            html += `<tr><td>Similarity Choice</td><td>${escapeHTML(simCodeObj.code || "-")}</td><td>${escapeHTML(simCodeObj.Explanation || "-")}</td></tr>`;
+            html += `<tr class="${votedCodeObj ? 'table-success' : ''}"><td>Agreed Choice</td><td>${escapeHTML(votedCodeObj || "-")}</td><td>-</td></tr>`;
+            html += "</tbody></table></div>";
+
+            // --- Retrieved Candidates Collapsible Section ---
+            const candidates = data.similarity_choice?.similarity_retrieved_candidates || [];
+            if (candidates.length > 0) {
+                html += `
+                <h5>
+                    <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#candidatesCollapse" aria-expanded="false" aria-controls="candidatesCollapse">
+                        Retrieved Candidates
+                    </button>
+                </h5>
+                <div class="collapse" id="candidatesCollapse">
+                    <div class="table-wrapper">
+                        <table class="table table-striped table-bordered">
+                            <thead class="table-dark">
+                                <tr><th>Code</th><th>Hierarchy</th><th>Description</th><th>Example Document Types</th></tr>
+                            </thead>
+                            <tbody>`;
+                candidates.forEach(c => {
+                    const code = escapeHTML(c.code || "-");
+                    const hierarchy = [c.function, c.class, c.subclass, c.detail].filter(Boolean).join(" > ");
+                    const description = escapeHTML(c.description || "-");
+                    const examples = escapeHTML(c.example_document_types || "-");
+                    html += `<tr><td>${code}</td><td>${hierarchy}</td><td>${description}</td><td>${examples}</td></tr>`;
+                });
+                html += `</tbody></table></div></div>`;
+            }
+
+            document.getElementById("results").innerHTML = html;
+        }
+
+        function escapeHTML(str) {
+            return String(str).replace(/[&<>"']/g, s => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[s]));
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

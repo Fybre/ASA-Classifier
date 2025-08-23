@@ -1,0 +1,16 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ./ollama_data:/root/.ollama
+
+  asa-classifier:
+    image: fybre/asa-classifier
+    container_name: asa-classifier
+    restart: unless-stopped
+    ports:
+      - "8000"
+    environment:
+      - LLM_PROVIDER=ollama

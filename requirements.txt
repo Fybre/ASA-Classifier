@@ -1,0 +1,11 @@
+pandas
+llama-index
+llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+chromadb
+sentence-transformers
+ollama
+PyMuPDF
+fastapi[standard]
+python-multipart
+python-dotenv
