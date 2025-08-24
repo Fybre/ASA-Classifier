@@ -14,7 +14,7 @@ RUN pip install --upgrade pip \
 COPY . /app
 
  # Create necessary directories
-RUN mkdir -p /app/data /app/db
+RUN mkdir -p /app/data /app/data/reference /app/db
 
 EXPOSE 8000
 

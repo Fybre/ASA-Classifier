@@ -88,7 +88,8 @@ def call_llm(prompt: str) -> str:
     logger.debug(f"Calling LLM provider '{LLM_PROVIDER}' with model '{LLM_MODEL}'")
 
     if LLM_PROVIDER == "ollama":
-        response = ollama.chat(model=LLM_MODEL, messages=[{"role": "user", "content": prompt}])
+        options={"num_predict": 512, "top_p": 0.9, "top_k": 40, "temperature": 0.3}
+        response = ollama.chat(model=LLM_MODEL, messages=[{"role": "user", "content": prompt}], options=options)
         return response["message"]["content"]
 
     elif LLM_PROVIDER == "azure":
@@ -165,18 +166,34 @@ def classify_document_llm_using_asa(text: str) -> Dict:
     """
     logger.debug("Classifying using LLM with ASA definitions...")
     prompt = f"""
-You are a document classifier.
+    You are a document classifier.
+
 Document:
 \"\"\"{text}\"\"\"
+
 ASA Definitions:
 \"\"\"{asa_definitions}\"\"\"
-Task: Classify the document into a single ASA code based on the definitions provided. 
-Choose the most relevant code that fits the document content, but give preference to codes related to STUDENT MANAGEMENT if multiple are relevant.
 
-Return your answer as valid JSON only:
+Task: Classify the document into a single ASA code based on the definitions provided.
+Choose the most relevant code that fits the document content, giving preference to STUDENT MANAGEMENT codes when multiple are relevant.
+
+Return your answer as strictly valid JSON only, with this exact format (no extra text before or after):
+
 {{
   "code": "<ASA code>", 
-  "Explanation": "<short explanation why this code fits>"
+  "Explanation": "<a short explanation why this code fits>"
+}}
+
+Notes:
+- The "code" field must be ONLY the numerical ASA code, e.g. "5.1.2" or "4.1" — no extra words or characters.
+- The code consists only of digits and dots as separators.
+- Only output the JSON object. No additional commentary, text, or formatting.
+
+Example:
+
+{{
+  "code": "5.1.2", 
+  "Explanation": "The document discusses attendance policies relevant to student management under code 5.1.2."
 }}
 """
 
@@ -261,8 +278,7 @@ def classify_document_similarity(text: str,
     ])
 
     # Build prompt for LLM selection
-    prompt = f"""
-You are a document classifier. 
+    prompt = f"""You are a document classifier.
 
 Document:
 \"\"\"{text}\"\"\"
@@ -272,12 +288,25 @@ Candidate codes with similarity scores:
 
 Task: Pick the single best code from the list above.
 
-Return your answer as valid JSON only:
+Return your answer as strictly valid JSON only, with this exact format (no extra text before or after):
 {{
-  "code": "<best code>",
-  "Explanation": "<short explanation why this code fits>"
+  "code": "<ASA code>", 
+  "Explanation": "<a short explanation why this code fits>"
+}}
+
+Notes:
+- The "code" field must be ONLY the numerical ASA code, e.g. "5.1.2" or "4.1" — no extra words or characters.
+- The code consists only of digits and dots as separators.
+- Only output the JSON object. No additional commentary, text, or formatting.
+
+Example:
+
+{{
+  "code": "5.1.2", 
+  "Explanation": "The document discusses attendance policies relevant to student management under code 5.1.2."
 }}
 """
+
 
     llm_answer = call_llm(prompt=prompt).strip()
     logger.debug(f"Raw LLM response (similarity): {llm_answer[:200]}...")
@@ -292,7 +321,7 @@ Return your answer as valid JSON only:
         logger.error("Failed to parse similarity LLM response as JSON")
         llm_result = {
             "code": limited_candidates[0]["code"] if limited_candidates else None,
-            "Explanation": "Fallback: could not parse LLM response"
+            "Explanation": "Fallback: No similar candidates found" if limited_candidates else "Fallback: Could not parse LLM response"
         }
 
     return {

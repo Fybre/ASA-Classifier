@@ -148,27 +148,41 @@
             const candidates = data.similarity_choice?.similarity_retrieved_candidates || [];
             if (candidates.length > 0) {
                 html += `
-                <h5>
-                    <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#candidatesCollapse" aria-expanded="false" aria-controls="candidatesCollapse">
-                        Retrieved Candidates
-                    </button>
-                </h5>
-                <div class="collapse" id="candidatesCollapse">
-                    <div class="table-wrapper">
-                        <table class="table table-striped table-bordered">
-                            <thead class="table-dark">
-                                <tr><th>Code</th><th>Hierarchy</th><th>Description</th><th>Example Document Types</th></tr>
-                            </thead>
-                            <tbody>`;
+    <h5>
+        <button class="btn btn-link" type="button" data-bs-toggle="collapse" data-bs-target="#candidatesCollapse" aria-expanded="false" aria-controls="candidatesCollapse">
+            Retrieved Candidates
+        </button>
+    </h5>
+    <div class="collapse" id="candidatesCollapse">
+        <div class="table-wrapper">
+            <table class="table table-striped table-bordered">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Code</th>
+                        <th>Hierarchy</th>
+                        <th>Description</th>
+                        <th>Example Document Types</th>
+                        <th>Score</th> <!-- New column for Score -->
+                    </tr>
+                </thead>
+                <tbody>`;
                 candidates.forEach(c => {
                     const code = escapeHTML(c.code || "-");
                     const hierarchy = [c.function, c.class, c.subclass, c.detail].filter(Boolean).join(" > ");
                     const description = escapeHTML(c.description || "-");
                     const examples = escapeHTML(c.example_document_types || "-");
-                    html += `<tr><td>${code}</td><td>${hierarchy}</td><td>${description}</td><td>${examples}</td></tr>`;
+                    const score = c.score !== undefined ? c.score.toFixed(3) : "-"; // Format score if present
+                    html += `<tr>
+            <td>${code}</td>
+            <td>${hierarchy}</td>
+            <td>${description}</td>
+            <td>${examples}</td>
+            <td>${score}</td> <!-- Insert score value -->
+        </tr>`;
                 });
                 html += `</tbody></table></div></div>`;
             }
+
 
             document.getElementById("results").innerHTML = html;
         }
