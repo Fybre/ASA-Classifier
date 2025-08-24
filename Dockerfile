@@ -16,8 +16,6 @@ COPY . /app
  # Create necessary directories
 RUN mkdir -p /app/data /app/db
 
-RUN python embedder.py
-
 EXPOSE 8000
 
 # Start the FastAPI application

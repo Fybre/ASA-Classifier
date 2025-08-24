@@ -16,6 +16,8 @@ import logging
 
 EMBED_MODEL = "sentence-transformers/all-mpnet-base-v2"
 DB_PATH = "db/chroma_asa_rrds"
+ASA_DOC_PATH = "data/asa_rrds.csv"
+REFERENCE_PATH = "data/reference"
 
 # ---------------------------
 # Logger Setup
@@ -94,7 +96,7 @@ def get_asa_documents(asa_detail_list):
     
     return documents
 
-def get_custom_metadata(filename):
+def get_custom_metadata(filename, asa_details):
     """
     Load metadata for a file based on its parent directory name.
     Looks up ASA details using the directory name as a code.
@@ -117,13 +119,18 @@ def get_custom_metadata(filename):
     return asa_detail.to_dict()
 
 
-def get_reference_documents(directory):
+def get_reference_documents(directory, asa_details):
     """
     Load reference documents from a directory.
     """
     logger.info(f"Loading reference documents from {directory}...")
     try:
-        reader = SimpleDirectoryReader(directory, recursive=True, file_metadata=get_custom_metadata,required_exts=[".txt"])
+        reader = SimpleDirectoryReader(
+            directory,
+            recursive=True,
+            file_metadata=lambda filename: get_custom_metadata(filename, asa_details),
+            required_exts=[".txt"]
+        )
         return reader.load_data()
     except Exception as e:
         logger.error(f"Error reading directory {directory}: {e}")
@@ -161,44 +168,44 @@ def convert_documents_to_text(directory):
                 logger.error(f"❌ Failed to process {file_path}: {e}")
         
 
+def embed(db_path=DB_PATH, reference_path=REFERENCE_PATH, asa_doc_path=ASA_DOC_PATH):
 # Ensure the database directory is clean
-if os.path.exists("db/chroma_asa_rrds"):
-    logger.info("Clearing previous ChromaDB database...")
-    shutil.rmtree(DB_PATH, ignore_errors=True)  # Clear previous database
+    if os.path.exists(db_path):
+        logger.info("Clearing previous ChromaDB database...")
+        shutil.rmtree(db_path, ignore_errors=True)  # Clear previous database
 
-# Initialize ChromaDB client and collection
-logger.info("Initializing ChromaDB client...")
+    # Initialize ChromaDB client and collection
+    logger.info("Initializing ChromaDB client...")
 
-chroma_client = chromadb.PersistentClient(DB_PATH, settings=Settings(anonymized_telemetry=False))
-chroma_collection = chroma_client.get_or_create_collection("asa_rrds")
-embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL)
+    chroma_client = chromadb.PersistentClient(db_path, settings=Settings(anonymized_telemetry=False))
+    chroma_collection = chroma_client.get_or_create_collection("asa_rrds")
+    embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL, device="cpu")
 
-# Convert all documents in the reference directory to text format
-logger.info("Converting reference documents to text format...")
-convert_documents_to_text("data/reference")
+    # Convert all documents in the reference directory to text format
+    logger.info("Converting reference documents to text format...")
+    convert_documents_to_text(reference_path)
 
-# Load all documents from both ASA RRDS and reference directories
-logger.info("Loading all documents...")
-# Load ASA RRDS details and convert to documents
-asa_details = get_asa_details_from_csv("data/asa_rrds.csv")
-# Convert ASA details to LlamaIndex Document objects
-asa_documents = get_asa_documents(asa_detail_list=asa_details)
-# Load reference documents from the specified directory
-reference_documents = get_reference_documents("data/reference")
+    # Load all documents from both ASA RRDS and reference directories
+    logger.info("Loading all documents...")
+    # Load ASA RRDS details and convert to documents
+    asa_details = get_asa_details_from_csv(asa_doc_path)
+    # Convert ASA details to LlamaIndex Document objects
+    asa_documents = get_asa_documents(asa_detail_list=asa_details)
+    # Load reference documents from the specified directory
+    reference_documents = get_reference_documents(reference_path, asa_details=asa_details)
 
+    all_documents = asa_documents + reference_documents
 
+    # Set up Chroma vector store
 
-all_documents = asa_documents + reference_documents
+    vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
+    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    # Create the index from the nodes
+    logger.info("Creating index from documents...")
+    index = VectorStoreIndex.from_documents(
+        all_documents, storage_context=storage_context, embed_model=embed_model
+    )
+    logger.info("All classes and descriptions stored to ChromaDB via LlamaIndex.")
 
-# Set up Chroma vector store
-
-vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
-storage_context = StorageContext.from_defaults(vector_store=vector_store)
-# Create the index from the nodes
-logger.info("Creating index from documents...")
-index = VectorStoreIndex.from_documents(
-    all_documents, storage_context=storage_context, embed_model=embed_model
-)
-
-logger.info("All classes and descriptions stored to ChromaDB via LlamaIndex.")
-
+if __name__ == "__main__":
+    embed()
