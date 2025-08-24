@@ -1,5 +1,7 @@
 /.venv
 /__pycache__
-/data/reference
-/db
+/data/reference/*
+!/data/reference/.gitkeep
+/db/*
+!/db/.gitkeep
 .env
