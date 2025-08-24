@@ -1,5 +1,7 @@
 data/reference/*
+!data/reference/.gitkeep
 db/*
+!db/.gitkeep
 __pycache__/
 *.pyc
 *.pyo
