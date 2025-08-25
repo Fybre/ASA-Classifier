@@ -18,5 +18,5 @@ Return your answer as strictly valid JSON only, with this exact format (no extra
 Notes:
 - The "code" field must be ONLY the numerical ASA code, e.g. "5.1.2" or "4.11".
 - The code consists only of digits and dots as separators.
-- The code must exist in the supplied ASA Definitions, do not make up a code that is not listed
+- The code must exist in the supplied candidates, do not make up a code that is not listed
 - Only output the JSON object. No extra commentary.

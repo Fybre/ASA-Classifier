@@ -1,3 +1,4 @@
+import logging
 from typing import Dict
 import pandas as pd
 from llama_index.core import VectorStoreIndex
@@ -14,7 +15,6 @@ from llama_index.core.vector_stores import (
     FilterOperator,
 )
 
-import logging
 from openai import AzureOpenAI
 import ollama
 import chromadb
@@ -34,15 +34,6 @@ LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "")
 
 TOP_K_CANDIDATES = 8
 SIMILARITY_THRESHOLD = 0.30  # adjust based on accuracy/performance tradeoff
-
-# ---------------------------
-# Logger Setup
-# ---------------------------
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.DEBUG,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 
 
 # ---------------------------
@@ -71,10 +62,10 @@ def get_asa_definitions(csv_file):
     Load ASA codes and definitions from a CSV file into a single text block.
     Used for prompting the LLM.
     """
-    logger.info(f"Loading ASA definitions from {csv_file}...")
+    logging.info(f"Loading ASA definitions from {csv_file}...")
     df = pd.read_csv(csv_file, dtype=str, keep_default_na=False)
 
-    asa_definitions = "The following are the ASA codes and their definitions:\n\n"
+    asa_definitions = "The following are the ASA codes and their description and examples:\n\n"
     for idx, row in df.iterrows():
         asa_definitions += (
             f"{safe_get(row,'Code')} (Classification Hierarchy: "
@@ -83,7 +74,7 @@ def get_asa_definitions(csv_file):
             f"Description: {safe_get(row,'Description')}, "
             f"Example Documents: {safe_get(row,'Example Document Types')})\n\n"
         )
-    logger.info(f"Loaded {len(df)} ASA definitions.")
+    logging.info(f"Loaded {len(df)} ASA definitions.")
     return asa_definitions
 
 
@@ -95,7 +86,7 @@ def call_llm(prompt: str) -> str:
     Call the configured LLM provider (Ollama, Azure, or OpenAI) with the given prompt.
     Returns the raw text response.
     """
-    logger.debug(f"Calling LLM provider '{LLM_PROVIDER}' with model '{LLM_MODEL}'")
+    logging.debug(f"Calling LLM provider '{LLM_PROVIDER}' with model '{LLM_MODEL}'")
 
     if LLM_PROVIDER == "ollama":
         options={
@@ -146,7 +137,7 @@ def classify_document(text: str, use_similarity: bool = True, use_llm: bool = Tr
     - Similarity search (based on vector embeddings + Chroma index)
     Combines results and attempts a "voted" choice.
     """
-    logger.info("Classifying document...")
+    logging.info("Classifying document...")
     llm_result = classify_document_llm_using_asa(text) if use_llm else None
     similarity_result = classify_document_similarity(text, source_filter=source_filter) if use_similarity else None
 
@@ -163,7 +154,7 @@ def classify_document(text: str, use_similarity: bool = True, use_llm: bool = Tr
         else None
     )
 
-    logger.info(f"LLM choice: {asa_code}, Similarity choice: {similarity_code}, Voted choice: {voted_choice}")
+    logging.info(f"LLM choice: {asa_code}, Similarity choice: {similarity_code}, Voted choice: {voted_choice}")
 
     return {
         "asa_llm_choice": llm_result,
@@ -180,7 +171,7 @@ def classify_document_llm_using_asa(text: str) -> Dict:
     Classify a document using the LLM only.
     It compares the document text to the full set of ASA definitions.
     """
-    logger.debug("Classifying using LLM with ASA definitions...")
+    logging.debug("Classifying using LLM with ASA definitions...")
 
     prompt = load_prompt("classify_llm_asa.txt", {
         "document": text,
@@ -188,7 +179,7 @@ def classify_document_llm_using_asa(text: str) -> Dict:
     })
 
     llm_answer = call_llm(prompt=prompt).strip()
-    logger.debug(f"Raw LLM response: {llm_answer[:200]}...")
+    logging.debug(f"Raw LLM response: {llm_answer[:200]}...")
 
     # Extract JSON
     json_match = re.search(r"\{.*\}", llm_answer, re.DOTALL)
@@ -198,7 +189,7 @@ def classify_document_llm_using_asa(text: str) -> Dict:
     try:
         llm_result = json.loads(llm_answer)
     except json.JSONDecodeError:
-        logger.error("Failed to parse LLM response as JSON")
+        logging.error("Failed to parse LLM response as JSON")
         llm_result = {"code": None, "Explanation": "Unable to parse LLM response"}
 
     return {"asa_llm_choice": llm_result}
@@ -215,7 +206,7 @@ def classify_document_similarity(text: str,
     Classify a document using semantic similarity search from the Chroma vector store.
     Optionally filters results by metadata (e.g., source).
     """
-    logger.debug("Classifying using similarity search...")
+    logging.debug("Classifying using similarity search...")
     metadata_filter = None
     if source_filter:
         metadata_filter = MetadataFilters(filters=[
@@ -232,7 +223,7 @@ def classify_document_similarity(text: str,
     candidates = []
     for r in results:
         if not r.node.metadata or r.score is None:
-            logger.warning(f"Skipping result with no metadata: {r.node.id}")
+            logging.warning(f"Skipping result with no metadata: {r.node.id}")
             continue
         candidates.append({
             "score": float(r.score),
@@ -247,7 +238,7 @@ def classify_document_similarity(text: str,
             "source": r.node.metadata.get("source", "unknown")
         })
 
-    logger.debug(f"Retrieved {len(candidates)} candidates")
+    logging.debug(f"Retrieved {len(candidates)} candidates")
 
     # Filter by threshold
     filtered_candidates = [c for c in candidates if c["score"] >= similarity_threshold]
@@ -257,7 +248,7 @@ def classify_document_similarity(text: str,
     if not filtered_candidates and candidates:
         filtered_candidates = [max(candidates, key=lambda x: x["score"])]
         fallback_used = True
-        logger.info("No candidates passed threshold — using fallback top candidate")
+        logging.info("No candidates passed threshold — using fallback top candidate")
 
     limited_candidates = filtered_candidates[:top_k_candidates]
 
@@ -275,7 +266,7 @@ def classify_document_similarity(text: str,
     })
 
     llm_answer = call_llm(prompt=prompt).strip()
-    logger.debug(f"Raw LLM response (similarity): {llm_answer[:200]}...")
+    logging.debug(f"Raw LLM response (similarity): {llm_answer[:200]}...")
 
     json_match = re.search(r"\{.*\}", llm_answer, re.DOTALL)
     if json_match:
@@ -284,7 +275,7 @@ def classify_document_similarity(text: str,
     try:
         llm_result = json.loads(llm_answer)
     except json.JSONDecodeError:
-        logger.error("Failed to parse similarity LLM response as JSON")
+        logging.error("Failed to parse similarity LLM response as JSON")
         llm_result = {
             "code": limited_candidates[0]["code"] if limited_candidates else None,
             "Explanation": "Fallback: No similar candidates found" if limited_candidates else "Fallback: Could not parse LLM response"
@@ -306,7 +297,7 @@ def load_index(path, model=EMBED_MODEL) -> VectorStoreIndex:
     Raises FileNotFoundError if DB_PATH does not exist.
     """
     if os.path.exists(DB_PATH):
-        logger.info(f"Loading index from {path} with model '{model}'")
+        logging.info(f"Loading index from {path} with model '{model}'")
         chroma_client = chromadb.PersistentClient(path, settings=Settings(anonymized_telemetry=False))
         chroma_collection = chroma_client.get_collection("asa_rrds")
         embed_model = HuggingFaceEmbedding(model_name=model)
@@ -314,7 +305,7 @@ def load_index(path, model=EMBED_MODEL) -> VectorStoreIndex:
         storage_context = StorageContext.from_defaults(vector_store=vector_store)
         return VectorStoreIndex.from_vector_store(vector_store, storage_context=storage_context, embed_model=embed_model)
     else:
-        logger.error(f"Index not found at {path}. Please run the embedder first.")
+        logging.error(f"Index not found at {path}. Please run the embedder first.")
         raise FileNotFoundError(f"Index not found at {path}")
 
 

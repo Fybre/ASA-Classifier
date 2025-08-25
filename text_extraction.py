@@ -5,9 +5,6 @@ import os
 import logging
 import tempfile
 
-# Configure logger
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 OCR_TOKEN = os.getenv("OCR_TOKEN", "")
 OCR_URL = "https://ocr.fybre.me/ocrazure/?first_page_only=false"
@@ -21,7 +18,7 @@ def read_upload_file(file: UploadFile, use_local_ocr: bool = USE_LOCAL_OCR) -> s
     - PDF files: extract using fitz (local OCR) or OCR API
     """
     if file.content_type == "text/plain":
-        logger.debug(f"Reading TXT file: {file.filename}")
+        logging.debug(f"Reading TXT file: {file.filename}")
         return file.file.read().decode("utf-8").strip()
 
     if use_local_ocr:
@@ -31,17 +28,17 @@ def read_upload_file(file: UploadFile, use_local_ocr: bool = USE_LOCAL_OCR) -> s
             tmp_path = tmp_file.name
 
         try:
-            logger.info(f"Extracting text locally with fitz: {file.filename}")
+            logging.info(f"Extracting text locally with fitz: {file.filename}")
             return extract_text(tmp_path, use_local_ocr=True)
         finally:
             try:
                 os.remove(tmp_path)
             except Exception as e:
-                logger.warning(f"Failed to remove temp file {tmp_path}: {e}")
+                logging.warning(f"Failed to remove temp file {tmp_path}: {e}")
     else:
         # OCR API call
         try:
-            logger.info(f"Sending {file.filename} to OCR API")
+            logging.info(f"Sending {file.filename} to OCR API")
             response = requests.post(
                 OCR_URL,
                 headers={"X-Token": OCR_TOKEN},
@@ -52,7 +49,7 @@ def read_upload_file(file: UploadFile, use_local_ocr: bool = USE_LOCAL_OCR) -> s
             data = response.json()
             return data.get("content", "").strip()
         except Exception as e:
-            logger.error(f"OCR API request failed for {file.filename}: {e}")
+            logging.error(f"OCR API request failed for {file.filename}: {e}")
             return ""
 
 
@@ -72,16 +69,16 @@ def extract_text(file_path: str, use_local_ocr: bool = USE_LOCAL_OCR) -> str:
                         text += page_text + "\n\n--- PAGE BREAK ---\n\n"
 
             if text.strip():
-                logger.info(f"Extracted text locally from {file_path}")
+                logging.info(f"Extracted text locally from {file_path}")
                 return text.strip()
             else:
-                logger.debug(f"No text extracted with fitz from {file_path}")
+                logging.debug(f"No text extracted with fitz from {file_path}")
         except Exception as e:
-            logger.warning(f"fitz extraction failed for {file_path}: {e}")
+            logging.warning(f"fitz extraction failed for {file_path}: {e}")
 
     # OCR fallback
     try:
-        logger.debug(f"Sending {file_path} to OCR API (fallback)")
+        logging.debug(f"Sending {file_path} to OCR API (fallback)")
         with open(file_path, "rb") as f:
             response = requests.post(
                 OCR_URL,
@@ -93,6 +90,6 @@ def extract_text(file_path: str, use_local_ocr: bool = USE_LOCAL_OCR) -> str:
             data = response.json()
             return data.get("content", "").strip()
     except Exception as e:
-        logger.error(f"OCR failed for {file_path}: {e}")
+        logging.error(f"OCR failed for {file_path}: {e}")
 
     return ""

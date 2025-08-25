@@ -20,14 +20,6 @@ ASA_DOC_PATH = os.getenv("ASA_DOC_PATH", "data/asa_rrds.csv")
 REFERENCE_PATH = os.getenv("REFERENCE_PATH", "data/reference")
 USE_LOCAL_TEXT_EXTRACTION_FOR_EMBEDDING=os.getenv("USE_LOCAL_TEXT_EXTRACTION_FOR_EMBEDDING", "False")
 
-# ---------------------------
-# Logger Setup
-# ---------------------------
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-)
 
 class ASACode:
     def __init__(self, code, function, class_name, subclass=None, detail=None, description=None, example_document_types=None, category_mapping=None, source=None):
@@ -63,7 +55,7 @@ def get_asa_details_from_csv(csv_file):
     """
     Load ASA documents from a CSV file.
     """
-    logger.info(f"Loading ASA documents from {csv_file}...")
+    logging.info(f"Loading ASA documents from {csv_file}...")
     df = pd.read_csv(csv_file, dtype=str, keep_default_na=False)
     asa_docs = []
     
@@ -86,7 +78,7 @@ def get_asa_documents(asa_detail_list):
     """
     Convert ASA details to LlamaIndex Document objects.
     """
-    logger.info("Converting ASA details to LlamaIndex Document objects...")
+    logging.info("Converting ASA details to LlamaIndex Document objects...")
     documents = []
     
     for code_obj in asa_detail_list:
@@ -107,15 +99,15 @@ def get_custom_metadata(filename, asa_details):
     try:
         asa_detail = next((item for item in asa_details if item.code == code), None)
     except NameError:
-        logger.error("asa_details is not defined.")
+        logging.error("asa_details is not defined.")
         return {"code": code}
 
     if not asa_detail:
-        logger.warning(f"No ASA detail found for code '{code}' in {filename}")
+        logging.warning(f"No ASA detail found for code '{code}' in {filename}")
         return {"code": code}
 
     asa_detail.source = "reference"
-    logger.debug(f"Loading metadata for {filename}: {asa_detail}")
+    logging.debug(f"Loading metadata for {filename}: {asa_detail}")
 
     return asa_detail.to_dict()
 
@@ -124,7 +116,7 @@ def get_reference_documents(directory, asa_details):
     """
     Load reference documents from a directory.
     """
-    logger.info(f"Loading reference documents from {directory}...")
+    logging.info(f"Loading reference documents from {directory}...")
     try:
         reader = SimpleDirectoryReader(
             directory,
@@ -134,7 +126,7 @@ def get_reference_documents(directory, asa_details):
         )
         return reader.load_data()
     except Exception as e:
-        logger.error(f"Error reading directory {directory}: {e}")
+        logging.error(f"Error reading directory {directory}: {e}")
         return []
 
 
@@ -142,7 +134,7 @@ def convert_documents_to_text(directory):
     """
     Convert all documents in a directory to text format.
     """
-    logger.info(f"Converting documents in {directory} to text format...")
+    logging.info(f"Converting documents in {directory} to text format...")
     for dirpath, _, filenames in os.walk(directory):
         for filename in filenames:
             file_path = os.path.join(dirpath, filename)
@@ -155,39 +147,39 @@ def convert_documents_to_text(directory):
             txt_path = os.path.splitext(file_path)[0] + ".txt"
 
             if os.path.exists(txt_path):
-                logger.info(f"✅ Skipping (already has .txt): {file_path}")
+                logging.info(f"✅ Skipping (already has .txt): {file_path}")
                 continue
 
             # Extract text and save
-            logger.info(f"🔍 Extracting text from: {file_path}")
+            logging.info(f"🔍 Extracting text from: {file_path}")
             try:
                 text = extract_text(file_path,USE_LOCAL_TEXT_EXTRACTION_FOR_EMBEDDING)
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(text)
-                logger.info(f"💾 Saved: {txt_path}")
+                logging.info(f"💾 Saved: {txt_path}")
             except Exception as e:
-                logger.error(f"❌ Failed to process {file_path}: {e}")
+                logging.error(f"❌ Failed to process {file_path}: {e}")
         
 
 def embed(db_path=DB_PATH, reference_path=REFERENCE_PATH, asa_doc_path=ASA_DOC_PATH):
 # Ensure the database directory is clean
     if os.path.exists(db_path):
-        logger.info("Clearing previous ChromaDB database...")
+        logging.info("Clearing previous ChromaDB database...")
         shutil.rmtree(db_path, ignore_errors=True)  # Clear previous database
 
     # Initialize ChromaDB client and collection
-    logger.info("Initializing ChromaDB client...")
+    logging.info("Initializing ChromaDB client...")
 
     chroma_client = chromadb.PersistentClient(db_path, settings=Settings(anonymized_telemetry=False))
     chroma_collection = chroma_client.get_or_create_collection("asa_rrds")
     embed_model = HuggingFaceEmbedding(model_name=EMBED_MODEL, device="cpu")
 
     # Convert all documents in the reference directory to text format
-    logger.info("Converting reference documents to text format...")
+    logging.info("Converting reference documents to text format...")
     convert_documents_to_text(reference_path)
 
     # Load all documents from both ASA RRDS and reference directories
-    logger.info("Loading all documents...")
+    logging.info("Loading all documents...")
     # Load ASA RRDS details and convert to documents
     asa_details = get_asa_details_from_csv(asa_doc_path)
     # Convert ASA details to LlamaIndex Document objects
@@ -202,11 +194,11 @@ def embed(db_path=DB_PATH, reference_path=REFERENCE_PATH, asa_doc_path=ASA_DOC_P
     vector_store = ChromaVectorStore(chroma_collection=chroma_collection)
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
     # Create the index from the nodes
-    logger.info("Creating index from documents...")
+    logging.info("Creating index from documents...")
     index = VectorStoreIndex.from_documents(
         all_documents, storage_context=storage_context, embed_model=embed_model
     )
-    logger.info("All classes and descriptions stored to ChromaDB via LlamaIndex.")
+    logging.info("All classes and descriptions stored to ChromaDB via LlamaIndex.")
 
 if __name__ == "__main__":
     embed()
