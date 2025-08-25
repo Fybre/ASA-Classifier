@@ -14,10 +14,11 @@ import os
 import shutil
 import logging
 
-EMBED_MODEL = "sentence-transformers/all-mpnet-base-v2"
-DB_PATH = "db/chroma_asa_rrds"
-ASA_DOC_PATH = "data/asa_rrds.csv"
-REFERENCE_PATH = "data/reference"
+EMBED_MODEL = os.getenv("EMBED_MODEL", "sentence-transformers/all-mpnet-base-v2")
+DB_PATH = os.getenv("DB_PATH", "db/chroma_asa_rrds")
+ASA_DOC_PATH = os.getenv("ASA_DOC_PATH", "data/asa_rrds.csv")
+REFERENCE_PATH = os.getenv("REFERENCE_PATH", "data/reference")
+USE_LOCAL_TEXT_EXTRACTION_FOR_EMBEDDING=os.getenv("USE_LOCAL_TEXT_EXTRACTION_FOR_EMBEDDING", "False")
 
 # ---------------------------
 # Logger Setup
@@ -160,7 +161,7 @@ def convert_documents_to_text(directory):
             # Extract text and save
             logger.info(f"🔍 Extracting text from: {file_path}")
             try:
-                text = extract_text(file_path, use_fitz=False)
+                text = extract_text(file_path,USE_LOCAL_TEXT_EXTRACTION_FOR_EMBEDDING)
                 with open(txt_path, "w", encoding="utf-8") as f:
                     f.write(text)
                 logger.info(f"💾 Saved: {txt_path}")

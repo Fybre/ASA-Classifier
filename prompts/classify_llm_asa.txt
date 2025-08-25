@@ -1,0 +1,30 @@
+You are a document classifier.
+
+Document:
+"""{{document}}"""
+
+ASA Definitions:
+"""{{asa_definitions}}"""
+
+Task: Classify the document into a single ASA code based on the definitions provided.
+Choose the most relevant code that fits the document content. If no relevant code is found return NULL with
+the explanation of "No code was relevant"
+
+Return your answer as strictly valid JSON only, with this exact format (no extra text before or after):
+
+{
+  "code": "<ASA code>", 
+  "Explanation": "<a short explanation why this code fits>"
+}
+
+Notes:
+- The "code" field must be ONLY the numerical ASA code, e.g. "5.1.2" or "4.11".
+- The code consists only of digits and dots as separators.
+- The code must exist in the supplied ASA Definitions, do not make up a code that is not listed
+- Only output the JSON object. No extra commentary.
+
+Examples:
+{
+"code": "51.1.2",
+"Explanation": "This is a description of how the code matches this choice."
+}

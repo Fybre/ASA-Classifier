@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess
 from fastapi import FastAPI, UploadFile, File, Form
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 import os
 from pydantic import BaseModel
@@ -16,7 +16,7 @@ load_dotenv()  # Load environment variables from .env file
 # Import your classify_document and call_llm logic
 from classifier import classify_document, DB_PATH, EMBED_MODEL
 
-DATA_DIR = Path("data")
+REFERENCE_PATH = os.getenv("REFERENCE_PATH", "data/reference")
 class TextRequest(BaseModel):
     text: str
 
@@ -24,6 +24,7 @@ class TextRequest(BaseModel):
 # Initialize FastAPI
 # -----------------------
 app = FastAPI(title="ASA Document Classifier")
+
 
 # -----------------------
 # FastAPI Endpoint
@@ -37,13 +38,13 @@ class SourceFilter(str, Enum):
     reference = "reference"
 
 # Case 1: JSON text input
-@app.post("/classify/text")
+@app.post("/api/classify/text")
 async def classify_text(req: TextRequest, source_filter: SourceFilter = None):
     result = classify_document(req.text, source_filter=source_filter)
     return result
 
 # Case 2: File upload (TXT or PDF)
-@app.post("/classify/file")
+@app.post("/api/classify/file")
 async def classify_file(file: UploadFile = File(...), source_filter: SourceFilter = None):
     if not file:
         return {"error": "No file provided."}
@@ -61,18 +62,24 @@ async def classify_file(file: UploadFile = File(...), source_filter: SourceFilte
     )
     return result
 
-@app.post("/upload-sample")
+@app.post("/api/upload-sample", include_in_schema=False)
 async def upload_sample(code: str = Form(...), file: UploadFile = None):
-    code_dir = DATA_DIR / code
-    code_dir.mkdir(parents=True, exist_ok=True)
-
-    file_path = code_dir / file.filename
+    code_dir = os.path.join(REFERENCE_PATH, code)
+    if not os.path.exists(code_dir):
+        os.makedirs(code_dir)
+    file_path = os.path.join(code_dir, file.filename)
+    i = 1
+    while True:
+        if not os.path.exists(file_path):
+            break
+        file_path = os.path.join(code_dir, f"{os.path.splitext(file.filename)[0]}_{i}{os.path.splitext(file.filename)[1]}")
+        i += 1
     with open(file_path, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
     return {"message": f"File saved to {file_path}"}
 
-@app.post("/regenerate")
+@app.post("/api/regenerate", include_in_schema=False)
 async def regenerate_embeddings():
     try:
         subprocess.run(["python", "embedder.py"], check=True)
@@ -80,13 +87,14 @@ async def regenerate_embeddings():
     except subprocess.CalledProcessError as e:
         return {"message": f"Error running embedder.py: {e}"}
 
+
 # Serve the HTML file at root URL
-@app.get("/", response_class=HTMLResponse)
+@app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def root():
     with open("html/classify.html", "r", encoding="utf-8") as f:
         return f.read()
 
-@app.get("/trainer", response_class=HTMLResponse)
+@app.get("/trainer", response_class=HTMLResponse, include_in_schema=False)
 async def trainer():
     with open("html/trainer.html", "r", encoding="utf-8") as f:
         return f.read()

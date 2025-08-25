@@ -85,7 +85,7 @@
             showLoader(true, "Submitting text for classification...");
 
             showLoader(true, "Processing classification results...");
-            const res = await fetch("/classify/text", {
+            const res = await fetch("/api/classify/text", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ text })
@@ -107,7 +107,7 @@
             showLoader(true, "Uploading file...");
 
             showLoader(true, "Processing classification results...");
-            const res = await fetch("/classify/file", {
+            const res = await fetch("/api/classify/file", {
                 method: "POST",
                 body: formData
             });
@@ -162,7 +162,8 @@
                         <th>Hierarchy</th>
                         <th>Description</th>
                         <th>Example Document Types</th>
-                        <th>Score</th> <!-- New column for Score -->
+                        <th>Score</th>
+                        <th>Source</th>
                     </tr>
                 </thead>
                 <tbody>`;
@@ -172,12 +173,14 @@
                     const description = escapeHTML(c.description || "-");
                     const examples = escapeHTML(c.example_document_types || "-");
                     const score = c.score !== undefined ? c.score.toFixed(3) : "-"; // Format score if present
+                    const source = escapeHTML(c.source || "-");
                     html += `<tr>
             <td>${code}</td>
             <td>${hierarchy}</td>
             <td>${description}</td>
             <td>${examples}</td>
-            <td>${score}</td> <!-- Insert score value -->
+            <td>${score}</td>
+            <td>${source}</td>
         </tr>`;
                 });
                 html += `</tbody></table></div></div>`;

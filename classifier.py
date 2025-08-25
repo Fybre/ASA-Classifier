@@ -32,7 +32,7 @@ LLM_MODEL = os.getenv("LLM_MODEL", "gpt-4.1")
 LLM_KEY = os.getenv("LLM_KEY", "")
 LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "")
 
-TOP_K_CANDIDATES = 5
+TOP_K_CANDIDATES = 8
 SIMILARITY_THRESHOLD = 0.30  # adjust based on accuracy/performance tradeoff
 
 # ---------------------------
@@ -40,7 +40,7 @@ SIMILARITY_THRESHOLD = 0.30  # adjust based on accuracy/performance tradeoff
 # ---------------------------
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 
@@ -51,6 +51,16 @@ logging.basicConfig(
 def safe_get(row, key):
     """Safely get a value from a DataFrame row as a stripped string."""
     return str(row.get(key, "")).strip()
+
+
+def load_prompt(file_name: str, variables: Dict[str, str]) -> str:
+    """Load a prompt template from file and replace {{placeholders}} with values."""
+    path = os.path.join("prompts", file_name)
+    with open(path, "r", encoding="utf-8") as f:
+        template = f.read()
+    for key, value in variables.items():
+        template = template.replace(f"{{{{{key}}}}}", str(value))
+    return template
 
 
 # ---------------------------
@@ -88,7 +98,13 @@ def call_llm(prompt: str) -> str:
     logger.debug(f"Calling LLM provider '{LLM_PROVIDER}' with model '{LLM_MODEL}'")
 
     if LLM_PROVIDER == "ollama":
-        options={"num_predict": 512, "top_p": 0.9, "top_k": 40, "temperature": 0.3}
+        options={
+            "temperature": 0.2,
+            "top_p": 1.0,
+            "top_k": 0,
+            "num_predict": 128,
+            "repeat_penalty": 1.05
+            }
         response = ollama.chat(model=LLM_MODEL, messages=[{"role": "user", "content": prompt}], options=options)
         return response["message"]["content"]
 
@@ -165,37 +181,11 @@ def classify_document_llm_using_asa(text: str) -> Dict:
     It compares the document text to the full set of ASA definitions.
     """
     logger.debug("Classifying using LLM with ASA definitions...")
-    prompt = f"""
-    You are a document classifier.
 
-Document:
-\"\"\"{text}\"\"\"
-
-ASA Definitions:
-\"\"\"{asa_definitions}\"\"\"
-
-Task: Classify the document into a single ASA code based on the definitions provided.
-Choose the most relevant code that fits the document content, giving preference to STUDENT MANAGEMENT codes when multiple are relevant.
-
-Return your answer as strictly valid JSON only, with this exact format (no extra text before or after):
-
-{{
-  "code": "<ASA code>", 
-  "Explanation": "<a short explanation why this code fits>"
-}}
-
-Notes:
-- The "code" field must be ONLY the numerical ASA code, e.g. "5.1.2" or "4.1" — no extra words or characters.
-- The code consists only of digits and dots as separators.
-- Only output the JSON object. No additional commentary, text, or formatting.
-
-Example:
-
-{{
-  "code": "5.1.2", 
-  "Explanation": "The document discusses attendance policies relevant to student management under code 5.1.2."
-}}
-"""
+    prompt = load_prompt("classify_llm_asa.txt", {
+        "document": text,
+        "asa_definitions": asa_definitions
+    })
 
     llm_answer = call_llm(prompt=prompt).strip()
     logger.debug(f"Raw LLM response: {llm_answer[:200]}...")
@@ -278,35 +268,11 @@ def classify_document_similarity(text: str,
     ])
 
     # Build prompt for LLM selection
-    prompt = f"""You are a document classifier.
-
-Document:
-\"\"\"{text}\"\"\"
-
-Candidate codes with similarity scores:
-{candidate_texts}
-
-Task: Pick the single best code from the list above.
-
-Return your answer as strictly valid JSON only, with this exact format (no extra text before or after):
-{{
-  "code": "<ASA code>", 
-  "Explanation": "<a short explanation why this code fits>"
-}}
-
-Notes:
-- The "code" field must be ONLY the numerical ASA code, e.g. "5.1.2" or "4.1" — no extra words or characters.
-- The code consists only of digits and dots as separators.
-- Only output the JSON object. No additional commentary, text, or formatting.
-
-Example:
-
-{{
-  "code": "5.1.2", 
-  "Explanation": "The document discusses attendance policies relevant to student management under code 5.1.2."
-}}
-"""
-
+    
+    prompt = load_prompt("classify_similarity.txt", {
+        "document": text,
+        "candidates": candidate_texts
+    })
 
     llm_answer = call_llm(prompt=prompt).strip()
     logger.debug(f"Raw LLM response (similarity): {llm_answer[:200]}...")

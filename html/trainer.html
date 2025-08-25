@@ -62,7 +62,7 @@
     <!-- Regenerate Embeddings Section -->
     <div class="section">
         <h2>Regenerate Embeddings</h2>
-        <button id="regenerateBtn">Run embedder.py</button>
+        <button id="regenerateBtn">Run embedder</button>
         <div id="regenMessage"></div>
     </div>
 
@@ -101,7 +101,7 @@
             formData.append("code", code);
             formData.append("file", file);
 
-            const resp = await fetch("/upload-sample", {
+            const resp = await fetch("/api/upload-sample", {
                 method: "POST",
                 body: formData
             });
@@ -111,8 +111,8 @@
 
         // Handle regenerate
         document.getElementById("regenerateBtn").addEventListener("click", async () => {
-            document.getElementById("regenMessage").textContent = "Running embedder.py...";
-            const resp = await fetch("/regenerate", { method: "POST" });
+            document.getElementById("regenMessage").textContent = "Running embedder..";
+            const resp = await fetch("/api/regenerate", { method: "POST" });
             const data = await resp.json();
             document.getElementById("regenMessage").textContent = data.message || "Done.";
         });
