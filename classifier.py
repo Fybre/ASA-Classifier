@@ -94,7 +94,8 @@ def call_llm(prompt: str) -> str:
             "top_p": 1.0,
             "top_k": 0,
             "num_predict": 128,
-            "repeat_penalty": 1.05
+            "repeat_penalty": 1.05,
+            "num_ctx": 10000
             }
         response = ollama.chat(model=LLM_MODEL, messages=[{"role": "user", "content": prompt}], options=options)
         return response["message"]["content"]
@@ -189,7 +190,7 @@ def classify_document_llm_using_asa(text: str) -> Dict:
     try:
         llm_result = json.loads(llm_answer)
     except json.JSONDecodeError:
-        logging.error("Failed to parse LLM response as JSON")
+        logging.error(f"Failed to parse LLM response as JSON:{llm_answer[:200]}")
         llm_result = {"code": None, "Explanation": "Unable to parse LLM response"}
 
     return {"asa_llm_choice": llm_result}
@@ -275,7 +276,7 @@ def classify_document_similarity(text: str,
     try:
         llm_result = json.loads(llm_answer)
     except json.JSONDecodeError:
-        logging.error("Failed to parse similarity LLM response as JSON")
+        logging.error(f"Failed to parse LLM response as JSON:{llm_answer[:200]}")
         llm_result = {
             "code": limited_candidates[0]["code"] if limited_candidates else None,
             "Explanation": "Fallback: No similar candidates found" if limited_candidates else "Fallback: Could not parse LLM response"
